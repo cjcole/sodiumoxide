@@ -5,51 +5,49 @@
 use ffi;
 use libc::c_ulonglong;
 use std::iter::repeat;
+#[cfg(feature = "default")]
 use rustc_serialize;
-use super::super::box_;
+
+/// Number of bytes in a `Seed`.
 pub const SEEDBYTES: usize = ffi::crypto_sign_ed25519_SEEDBYTES;
+
+/// Number of bytes in a `SecretKey`.
 pub const SECRETKEYBYTES: usize = ffi::crypto_sign_ed25519_SECRETKEYBYTES;
+
+/// Number of bytes in a `PublicKey`.
 pub const PUBLICKEYBYTES: usize = ffi::crypto_sign_ed25519_PUBLICKEYBYTES;
+
+/// Number of bytes in a `Signature`.
 pub const SIGNATUREBYTES: usize = ffi::crypto_sign_ed25519_BYTES;
 
-/// `Seed` that can be used for keypair generation
-///
-/// The `Seed` is used by `keypair_from_seed()` to generate
-/// a secret and public signature key.
-///
-/// When a `Seed` goes out of scope its contents
-/// will be zeroed out
-pub struct Seed(pub [u8; SEEDBYTES]);
+new_type! {
+    /// `Seed` that can be used for keypair generation
+    ///
+    /// The `Seed` is used by `keypair_from_seed()` to generate
+    /// a secret and public signature key.
+    ///
+    /// When a `Seed` goes out of scope its contents
+    /// will be zeroed out
+    secret Seed(SEEDBYTES);
+}
 
-newtype_drop!(Seed);
-newtype_clone!(Seed);
-newtype_impl!(Seed, SEEDBYTES);
+new_type! {
+    /// `SecretKey` for signatures
+    ///
+    /// When a `SecretKey` goes out of scope its contents
+    /// will be zeroed out
+    secret SecretKey(SECRETKEYBYTES);
+}
 
-/// `SecretKey` for signatures
-///
-/// When a `SecretKey` goes out of scope its contents
-/// will be zeroed out
-pub struct SecretKey(pub [u8; SECRETKEYBYTES]);
+new_type! {
+    /// `PublicKey` for signatures
+    public PublicKey(PUBLICKEYBYTES);
+}
 
-newtype_drop!(SecretKey);
-newtype_clone!(SecretKey);
-newtype_impl!(SecretKey, SECRETKEYBYTES);
-
-/// `PublicKey` for signatures
-#[derive(Copy)]
-pub struct PublicKey(pub [u8; PUBLICKEYBYTES]);
-
-newtype_clone!(PublicKey);
-newtype_impl!(PublicKey, PUBLICKEYBYTES);
-non_secret_newtype_impl!(PublicKey);
-
-/// Detached signature
-#[derive(Copy)]
-pub struct Signature(pub [u8; SIGNATUREBYTES]);
-
-newtype_clone!(Signature);
-newtype_impl!(Signature, SIGNATUREBYTES);
-non_secret_newtype_impl!(Signature);
+new_type! {
+    /// Detached signature
+    public Signature(SIGNATUREBYTES);
+}
 
 /// `gen_keypair()` randomly generates a secret key and a corresponding public
 /// key.
@@ -171,12 +169,11 @@ pub fn sk_to_curve25519(&SecretKey(ref sk): &SecretKey) -> box_::SecretKey {
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::round_trip;
 
     #[test]
     fn test_sign_verify() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let (pk, sk) = gen_keypair();
             let m = randombytes(i);
             let sm = sign(&m, &sk);
@@ -188,11 +185,11 @@ mod test {
     #[test]
     fn test_sign_verify_tamper() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let (pk, sk) = gen_keypair();
             let m = randombytes(i);
             let mut sm = sign(&m, &sk);
-            for j in (0..sm.len()) {
+            for j in 0..sm.len() {
                 sm[j] ^= 0x20;
                 assert!(Err(()) == verify(&mut sm, &pk));
                 sm[j] ^= 0x20;
@@ -203,7 +200,7 @@ mod test {
     #[test]
     fn test_sign_verify_detached() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let (pk, sk) = gen_keypair();
             let m = randombytes(i);
             let sig = sign_detached(&m, &sk);
@@ -214,11 +211,11 @@ mod test {
     #[test]
     fn test_sign_verify_detached_tamper() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let (pk, sk) = gen_keypair();
             let m = randombytes(i);
             let Signature(mut sig) = sign_detached(&m, &sk);
-            for j in (0..SIGNATUREBYTES) {
+            for j in 0..SIGNATUREBYTES {
                 sig[j] ^= 0x20;
                 assert!(!verify_detached(&Signature(sig), &m, &pk));
                 sig[j] ^= 0x20;
@@ -229,7 +226,7 @@ mod test {
     #[test]
     fn test_sign_verify_seed() {
         use randombytes::{randombytes, randombytes_into};
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let mut seedbuf = [0; 32];
             randombytes_into(&mut seedbuf);
             let seed = Seed(seedbuf);
@@ -244,14 +241,14 @@ mod test {
     #[test]
     fn test_sign_verify_tamper_seed() {
         use randombytes::{randombytes, randombytes_into};
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let mut seedbuf = [0; 32];
             randombytes_into(&mut seedbuf);
             let seed = Seed(seedbuf);
             let (pk, sk) = keypair_from_seed(&seed);
             let m = randombytes(i);
             let mut sm = sign(&m, &sk);
-            for j in (0..sm.len()) {
+            for j in 0..sm.len() {
                 sm[j] ^= 0x20;
                 assert!(Err(()) == verify(&mut sm, &pk));
                 sm[j] ^= 0x20;
@@ -324,10 +321,12 @@ mod test {
         }
     }
 
+    #[cfg(feature = "default")]
     #[test]
     fn test_serialisation() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        use test_utils::round_trip;
+        for i in 0..256usize {
             let (pk, sk) = gen_keypair();
             let m = randombytes(i);
             let sig = sign_detached(&m, &sk);

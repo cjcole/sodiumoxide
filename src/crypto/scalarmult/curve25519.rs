@@ -5,30 +5,31 @@
 //! Science 3958 (2006), 207–228, http://cr.yp.to/papers.html#curve25519.
 use ffi;
 
-pub const BYTES: usize = ffi::crypto_scalarmult_curve25519_BYTES;
+/// Number of bytes in a `GroupElement`.
+pub const GROUPELEMENTBYTES: usize = ffi::crypto_scalarmult_curve25519_BYTES;
+
+/// Number of bytes in a `Scalar`.
 pub const SCALARBYTES: usize = ffi::crypto_scalarmult_curve25519_SCALARBYTES;
+
+#[cfg(feature = "default")]
 use rustc_serialize;
 
-/// `Scalar` value (integer in byte representation)
-pub struct Scalar(pub [u8; SCALARBYTES]);
+new_type! {
+    /// `Scalar` value (integer in byte representation)
+    secret Scalar(SCALARBYTES);
+}
 
-newtype_drop!(Scalar);
-newtype_clone!(Scalar);
-newtype_impl!(Scalar, SCALARBYTES);
-
-/// `GroupElement`
-#[derive(Copy)]
-pub struct GroupElement(pub [u8; BYTES]);
-
-newtype_clone!(GroupElement);
-newtype_impl!(GroupElement, BYTES);
+new_type! {
+    /// `GroupElement`
+    secret GroupElement(GROUPELEMENTBYTES);
+}
 
 /// `scalarmult()` multiplies a group element `p`
 /// by an integer `n`. It returns the resulting group element
 /// `q`.
 pub fn scalarmult(&Scalar(ref n): &Scalar,
                   &GroupElement(ref p): &GroupElement) -> GroupElement {
-    let mut q = [0; BYTES];
+    let mut q = [0; GROUPELEMENTBYTES];
     unsafe {
         ffi::crypto_scalarmult_curve25519(&mut q, n, p);
     }
@@ -39,7 +40,7 @@ pub fn scalarmult(&Scalar(ref n): &Scalar,
 /// group element and an integer `n`. It returns the resulting
 /// group element `q`/
 pub fn scalarmult_base(&Scalar(ref n): &Scalar) -> GroupElement {
-    let mut q = [0; BYTES];
+    let mut q = [0; GROUPELEMENTBYTES];
     unsafe {
         ffi::crypto_scalarmult_curve25519_base(&mut q, n);
     }
@@ -128,7 +129,7 @@ mod bench {
 
     #[bench]
     fn bench_scalarmult(b: &mut test::Bencher) {
-        let mut gbs = [0u8; BYTES];
+        let mut gbs = [0u8; GROUPELEMENTBYTES];
         let mut sbs = [0u8; SCALARBYTES];
         randombytes_into(&mut gbs);
         randombytes_into(&mut sbs);

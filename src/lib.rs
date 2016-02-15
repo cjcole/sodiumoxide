@@ -52,6 +52,7 @@
 
 extern crate libsodium_sys as ffi;
 extern crate libc;
+#[cfg(any(test, feature = "default"))]
 extern crate rustc_serialize;
 
 /// `init()` initializes the sodium library and chooses faster versions of
@@ -67,8 +68,8 @@ pub fn init() -> bool {
 mod marshal;
 #[macro_use]
 mod newtype_macros;
-
 pub mod randombytes;
+pub mod utils;
 
 #[cfg(test)]
 mod test_utils;
@@ -87,4 +88,3 @@ pub mod crypto {
     pub mod shorthash;
     pub mod verify;
 }
-

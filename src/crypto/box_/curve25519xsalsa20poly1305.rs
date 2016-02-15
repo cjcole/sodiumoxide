@@ -7,39 +7,46 @@
 use ffi;
 use marshal::marshal;
 use randombytes::randombytes_into;
+#[cfg(feature = "default")]
 use rustc_serialize;
 
+/// Number of bytes in a `PublicKey`.
 pub const PUBLICKEYBYTES: usize = ffi::crypto_box_curve25519xsalsa20poly1305_PUBLICKEYBYTES;
+
+/// Number of bytes in a `SecretKey`.
 pub const SECRETKEYBYTES: usize = ffi::crypto_box_curve25519xsalsa20poly1305_SECRETKEYBYTES;
+
+/// Number of bytes in a `Nonce`.
 pub const NONCEBYTES: usize = ffi::crypto_box_curve25519xsalsa20poly1305_NONCEBYTES;
+
+/// Number of bytes in a `PrecomputedKey`.
 pub const PRECOMPUTEDKEYBYTES: usize = ffi::crypto_box_curve25519xsalsa20poly1305_BEFORENMBYTES;
+
 const ZEROBYTES: usize = ffi::crypto_box_curve25519xsalsa20poly1305_ZEROBYTES;
 const BOXZEROBYTES: usize = ffi::crypto_box_curve25519xsalsa20poly1305_BOXZEROBYTES;
 
-/// `PublicKey` for asymmetric authenticated encryption
-#[derive(Copy)]
-pub struct PublicKey(pub [u8; PUBLICKEYBYTES]);
+/// Number of bytes in the authenticator tag of an encrypted message
+/// i.e. the number of bytes by which the ciphertext is larger than the
+/// plaintext.
+pub const MACBYTES: usize = ffi::crypto_box_curve25519xsalsa20poly1305_MACBYTES;
 
-newtype_clone!(PublicKey);
-newtype_impl!(PublicKey, PUBLICKEYBYTES);
-non_secret_newtype_impl!(PublicKey);
+new_type! {
+    /// `SecretKey` for asymmetric authenticated encryption
+    ///
+    /// When a `SecretKey` goes out of scope its contents
+    /// will be zeroed out
+    secret SecretKey(SECRETKEYBYTES);
+}
 
-/// `SecretKey` for asymmetric authenticated encryption
-///
-/// When a `SecretKey` goes out of scope its contents
-/// will be zeroed out
-pub struct SecretKey(pub [u8; SECRETKEYBYTES]);
+new_type! {
+    /// `PublicKey` for asymmetric authenticated encryption
+    public PublicKey(PUBLICKEYBYTES);
+}
 
-newtype_drop!(SecretKey);
-newtype_clone!(SecretKey);
-newtype_impl!(SecretKey, SECRETKEYBYTES);
-
-/// `Nonce` for asymmetric authenticated encryption
-#[derive(Copy)]
-pub struct Nonce(pub [u8; NONCEBYTES]);
-
-newtype_clone!(Nonce);
-newtype_impl!(Nonce, NONCEBYTES);
+new_type! {
+    /// `Nonce` for asymmetric authenticated encryption
+    nonce Nonce(NONCEBYTES);
+}
 
 /// `gen_keypair()` randomly generates a secret key and a corresponding public key.
 ///
@@ -114,17 +121,15 @@ pub fn open(c: &[u8],
     }
 }
 
-/// Applications that send several messages to the same receiver can gain speed by
-/// splitting `seal()` into two steps, `precompute()` and `seal_precomputed()`.
-/// Similarly, applications that receive several messages from the same sender can gain
-/// speed by splitting `open()` into two steps, `precompute()` and `open_precomputed()`.
-///
-/// When a `PrecomputedKey` goes out of scope its contents will be zeroed out
-pub struct PrecomputedKey([u8; PRECOMPUTEDKEYBYTES]);
-
-newtype_drop!(PrecomputedKey);
-newtype_clone!(PrecomputedKey);
-newtype_impl!(PrecomputedKey, PRECOMPUTEDKEYBYTES);
+new_type! {
+    /// Applications that send several messages to the same receiver can gain speed by
+    /// splitting `seal()` into two steps, `precompute()` and `seal_precomputed()`.
+    /// Similarly, applications that receive several messages from the same sender can gain
+    /// speed by splitting `open()` into two steps, `precompute()` and `open_precomputed()`.
+    ///
+    /// When a `PrecomputedKey` goes out of scope its contents will be zeroed out
+    secret PrecomputedKey(PRECOMPUTEDKEYBYTES);
+}
 
 /// `precompute()` computes an intermediate key that can be used by `seal_precomputed()`
 /// and `open_precomputed()`
@@ -184,12 +189,11 @@ pub fn open_precomputed(c: &[u8],
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::round_trip;
 
     #[test]
     fn test_seal_open() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let (pk1, sk1) = gen_keypair();
             let (pk2, sk2) = gen_keypair();
             let m = randombytes(i);
@@ -203,7 +207,7 @@ mod test {
     #[test]
     fn test_seal_open_precomputed() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let (pk1, sk1) = gen_keypair();
             let (pk2, sk2) = gen_keypair();
             let k1 = precompute(&pk1, &sk2);
@@ -222,13 +226,13 @@ mod test {
     #[test]
     fn test_seal_open_tamper() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let (pk1, sk1) = gen_keypair();
             let (pk2, sk2) = gen_keypair();
             let m = randombytes(i);
             let n = gen_nonce();
             let mut c = seal(&m, &n, &pk1, &sk2);
-            for j in (0..c.len()) {
+            for j in 0..c.len() {
                 c[j] ^= 0x20;
                 assert!(Err(()) == open(&mut c, &n, &pk2, &sk1));
                 c[j] ^= 0x20;
@@ -239,7 +243,7 @@ mod test {
     #[test]
     fn test_seal_open_precomputed_tamper() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let (pk1, sk1) = gen_keypair();
             let (pk2, sk2) = gen_keypair();
             let k1 = precompute(&pk1, &sk2);
@@ -247,7 +251,7 @@ mod test {
             let m = randombytes(i);
             let n = gen_nonce();
             let mut c = seal_precomputed(&m, &n, &k1);
-            for j in (0..c.len()) {
+            for j in 0..c.len() {
                 c[j] ^= 0x20;
                 assert!(Err(()) == open_precomputed(&mut c, &n, &k2));
                 c[j] ^= 0x20;
@@ -369,9 +373,11 @@ mod test {
         assert!(m_pre == mexp);
     }
 
+    #[cfg(feature = "default")]
     #[test]
     fn test_serialisation() {
-        for _ in (0..256usize) {
+        use test_utils::round_trip;
+        for _ in 0..256usize {
             let (pk, sk) = gen_keypair();
             let n = gen_nonce();
             round_trip(pk);

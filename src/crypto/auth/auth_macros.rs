@@ -3,33 +3,32 @@ macro_rules! auth_module (($auth_name:ident,
                            $keybytes:expr,
                            $tagbytes:expr) => (
 
-use libc::{c_ulonglong};
+use libc::c_ulonglong;
 use randombytes::randombytes_into;
+#[cfg(feature = "default")]
 use rustc_serialize;
 
+/// Number of bytes in a `Key`.
 pub const KEYBYTES: usize = $keybytes;
+
+/// Number of bytes in a `Tag`.
 pub const TAGBYTES: usize = $tagbytes;
 
-/// Authentication `Key`
-///
-/// When a `Key` goes out of scope its contents
-/// will be zeroed out
-pub struct Key(pub [u8; KEYBYTES]);
+new_type! {
+    /// Authentication `Key`
+    ///
+    /// When a `Key` goes out of scope its contents
+    /// will be zeroed out
+    secret Key(KEYBYTES);
+}
 
-newtype_drop!(Key);
-newtype_clone!(Key);
-newtype_impl!(Key, KEYBYTES);
-
-/// Authentication `Tag`
-///
-/// The tag implements the traits `PartialEq` and `Eq` using constant-time
-/// comparison functions. See `sodiumoxide::crypto::verify::safe_memcmp`
-#[derive(Copy)]
-pub struct Tag(pub [u8; TAGBYTES]);
-
-newtype_clone!(Tag);
-newtype_impl!(Tag, TAGBYTES);
-non_secret_newtype_impl!(Tag);
+new_type! {
+    /// Authentication `Tag`
+    ///
+    /// The tag implements the traits `PartialEq` and `Eq` using constant-time
+    /// comparison functions. See `sodiumoxide::utils::memcmp`
+    public Tag(TAGBYTES);
+}
 
 /// `gen_key()` randomly generates a key for authentication
 ///
@@ -71,12 +70,11 @@ pub fn verify(&Tag(ref tag): &Tag, m: &[u8],
 #[cfg(test)]
 mod test_m {
     use super::*;
-    use test_utils::round_trip;
 
     #[test]
     fn test_auth_verify() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let k = gen_key();
             let m = randombytes(i);
             let tag = authenticate(&m, &k);
@@ -87,16 +85,16 @@ mod test_m {
     #[test]
     fn test_auth_verify_tamper() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let k = gen_key();
             let mut m = randombytes(i);
             let Tag(mut tagbuf) = authenticate(&mut m, &k);
-            for j in (0..m.len()) {
+            for j in 0..m.len() {
                 m[j] ^= 0x20;
                 assert!(!verify(&Tag(tagbuf), &mut m, &k));
                 m[j] ^= 0x20;
             }
-            for j in (0..tagbuf.len()) {
+            for j in 0..tagbuf.len() {
                 tagbuf[j] ^= 0x20;
                 assert!(!verify(&Tag(tagbuf), &mut m, &k));
                 tagbuf[j] ^= 0x20;
@@ -104,10 +102,12 @@ mod test_m {
         }
     }
 
+    #[cfg(feature = "default")]
     #[test]
     fn test_serialisation() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        use test_utils::round_trip;
+        for i in 0..256usize {
             let k = gen_key();
             let m = randombytes(i);
             let tag = authenticate(&m, &k);
@@ -177,13 +177,12 @@ macro_rules! auth_state (($state_name:ident,
                           $final_name:ident,
                           $tagbytes:expr) => (
 
-use libc::size_t;
 use std::mem;
 use ffi;
 
 /// Authentication `State`
 ///
-/// State for multi-part (streaming) authenticator tag computation.
+/// State for multi-part (streaming) authenticator tag (HMAC) computation.
 ///
 /// When a `State` goes out of scope its contents will be zeroed out.
 ///
@@ -192,6 +191,10 @@ use ffi;
 /// define its own `Key` type, instead using slices for its `init()` method.
 /// The caller of the functions is responsible for zeroing out the key after it's been used
 /// (in contrast to the simple interface which defines a `Drop` implementation for `Key`).
+///
+/// NOTE: these functions are specific to `libsodium` and do not exist in `NaCl`.
+
+#[must_use]
 pub struct State($state_name);
 
 impl Drop for State {
@@ -199,7 +202,7 @@ impl Drop for State {
         let &mut State(ref mut s) = self;
         unsafe {
             let sp: *mut $state_name = s;
-            ffi::sodium_memzero(sp as *mut u8, mem::size_of_val(s) as size_t);
+            ffi::sodium_memzero(sp as *mut u8, mem::size_of_val(s));
         }
     }
 }
@@ -209,7 +212,7 @@ impl State {
     pub fn init(k: &[u8]) -> State {
         unsafe {
             let mut s = mem::uninitialized();
-            $init_name(&mut s, k.as_ptr(), k.len() as size_t);
+            $init_name(&mut s, k.as_ptr(), k.len());
             State(s)
         }
     }
@@ -241,7 +244,7 @@ mod test_s {
     #[test]
     fn test_auth_eq_auth_state() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let k = gen_key();
             let m = randombytes(i);
             let tag = authenticate(&m, &k);
@@ -255,7 +258,7 @@ mod test_s {
     #[test]
     fn test_auth_eq_auth_state_chunked() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let k = gen_key();
             let m = randombytes(i);
             let tag = authenticate(&m, &k);

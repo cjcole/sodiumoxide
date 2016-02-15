@@ -3,29 +3,30 @@
 use ffi;
 use libc::c_ulonglong;
 use std::iter::repeat;
+#[cfg(feature = "default")]
 use rustc_serialize;
 
+/// Number of bytes in a `SecretKey`.
 pub const SECRETKEYBYTES: usize = ffi::crypto_sign_edwards25519sha512batch_SECRETKEYBYTES;
+
+/// Number of bytes in a `PublicKey`.
 pub const PUBLICKEYBYTES: usize = ffi::crypto_sign_edwards25519sha512batch_PUBLICKEYBYTES;
+
+/// Number of bytes in a `Signature`.
 pub const SIGNATUREBYTES: usize = ffi::crypto_sign_edwards25519sha512batch_BYTES;
 
-/// `SecretKey` for signatures
-///
-/// When a `SecretKey` goes out of scope its contents
-/// will be zeroed out
-pub struct SecretKey(pub [u8; SECRETKEYBYTES]);
+new_type! {
+    /// `SecretKey` for signatures
+    ///
+    /// When a `SecretKey` goes out of scope its contents
+    /// will be zeroed out
+    secret SecretKey(SECRETKEYBYTES);
+}
 
-newtype_drop!(SecretKey);
-newtype_clone!(SecretKey);
-newtype_impl!(SecretKey, SECRETKEYBYTES);
-
-/// `PublicKey` for signatures
-#[derive(Copy)]
-pub struct PublicKey(pub [u8; PUBLICKEYBYTES]);
-
-newtype_clone!(PublicKey);
-newtype_impl!(PublicKey, PUBLICKEYBYTES);
-non_secret_newtype_impl!(PublicKey);
+new_type! {
+    /// `PublicKey` for signatures
+    public PublicKey(PUBLICKEYBYTES);
+}
 
 /// `gen_keypair()` randomly generates a secret key and a corresponding public
 /// key.
@@ -88,7 +89,7 @@ mod test {
     #[test]
     fn test_sign_verify() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let (pk, sk) = gen_keypair();
             let m = randombytes(i);
             let sm = sign(&m, &sk);
@@ -100,11 +101,11 @@ mod test {
     #[test]
     fn test_sign_verify_tamper() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let (pk, sk) = gen_keypair();
             let m = randombytes(i);
             let mut sm = sign(&m, &sk);
-            for j in (0..sm.len()) {
+            for j in 0..sm.len() {
                 sm[j] ^= 0x20;
                 assert!(Err(()) == verify(&mut sm, &pk));
                 sm[j] ^= 0x20;

@@ -2,18 +2,32 @@
 //! and SHA-256
 use ffi;
 use randombytes::randombytes_into;
-use libc::{c_ulonglong, size_t};
+use libc::c_ulonglong;
+#[cfg(feature = "default")]
 use rustc_serialize;
 
+/// Number of bytes in a `Salt`.
 pub const SALTBYTES: usize = ffi::crypto_pwhash_scryptsalsa208sha256_SALTBYTES;
-pub const STRBYTES: usize = ffi::crypto_pwhash_scryptsalsa208sha256_STRBYTES;
+
+/// Number of bytes in a `HashedPassword`.
+pub const HASHEDPASSWORDBYTES: usize = ffi::crypto_pwhash_scryptsalsa208sha256_STRBYTES;
+
+/// All `HashedPasswords` start with this string.
 pub const STRPREFIX: &'static str = ffi::crypto_pwhash_scryptsalsa208sha256_STRPREFIX;
+
+/// Safe base line for `OpsLimit` for interactive password hashing.
 pub const OPSLIMIT_INTERACTIVE: OpsLimit =
     OpsLimit(ffi::crypto_pwhash_scryptsalsa208sha256_OPSLIMIT_INTERACTIVE);
+
+/// Safe base line for `MemLimit` for interactive password hashing.
 pub const MEMLIMIT_INTERACTIVE: MemLimit =
     MemLimit(ffi::crypto_pwhash_scryptsalsa208sha256_MEMLIMIT_INTERACTIVE);
+
+/// `OpsLimit` for highly sensitive data.
 pub const OPSLIMIT_SENSITIVE: OpsLimit =
     OpsLimit(ffi::crypto_pwhash_scryptsalsa208sha256_OPSLIMIT_SENSITIVE);
+
+/// `MemLimit` for highly sensitive data.
 pub const MEMLIMIT_SENSITIVE: MemLimit =
     MemLimit(ffi::crypto_pwhash_scryptsalsa208sha256_MEMLIMIT_SENSITIVE);
 
@@ -33,21 +47,19 @@ pub struct OpsLimit(pub usize);
 #[derive(Copy, Clone)]
 pub struct MemLimit(pub usize);
 
-/// `Salt` used for password hashing
-#[derive(Copy)]
-pub struct Salt(pub [u8; SALTBYTES]);
-newtype_clone!(Salt);
-newtype_impl!(Salt, SALTBYTES);
+new_type! {
+    /// `Salt` used for password hashing
+    public Salt(SALTBYTES);
+}
 
-/// `HashedPassword`is a password verifier generated from a password
-///
-/// A `HashedPassword` is zero-terminated, includes only ASCII characters and can
-/// be conveniently stored into SQL databases and other data stores. No
-/// additional information has to be stored in order to verify the password.
-#[derive(Copy)]
-pub struct HashedPassword(pub [u8; STRBYTES]);
-newtype_clone!(HashedPassword);
-newtype_impl!(HashedPassword, STRBYTES);
+new_type! {
+    /// `HashedPassword`is a password verifier generated from a password
+    ///
+    /// A `HashedPassword` is zero-terminated, includes only ASCII characters and can
+    /// be conveniently stored into SQL databases and other data stores. No
+    /// additional information has to be stored in order to verify the password.
+    public HashedPassword(HASHEDPASSWORDBYTES);
+}
 
 /// `gen_salt()` randombly generates a new `Salt` for key derivation
 ///
@@ -101,7 +113,7 @@ pub fn derive_key<'a>(key: &'a mut [u8], passwd: &[u8], &Salt(ref sb): &Salt,
                                                 passwd.len() as c_ulonglong,
                                                 sb,
                                                 opslimit as c_ulonglong,
-                                                memlimit as size_t)
+                                                memlimit)
     } == 0 {
         Ok(key)
     } else {
@@ -125,14 +137,14 @@ pub fn derive_key<'a>(key: &'a mut [u8], passwd: &[u8], &Salt(ref sb): &Salt,
 /// successfully
 pub fn pwhash(passwd: &[u8], OpsLimit(opslimit): OpsLimit,
               MemLimit(memlimit): MemLimit) -> Result<HashedPassword, ()> {
-    let mut out = HashedPassword([0; STRBYTES]);
+    let mut out = HashedPassword([0; HASHEDPASSWORDBYTES]);
     if unsafe {
         let HashedPassword(ref mut str_) = out;
         ffi::crypto_pwhash_scryptsalsa208sha256_str(str_,
                                                     passwd.as_ptr(),
                                                     passwd.len() as c_ulonglong,
                                                     opslimit as c_ulonglong,
-                                                    memlimit as size_t)
+                                                    memlimit)
     } == 0 {
         Ok(out)
     } else {
@@ -157,7 +169,6 @@ pub fn pwhash_verify(&HashedPassword(ref str_): &HashedPassword,
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::round_trip;
 
     #[test]
     fn test_derive_key() {
@@ -178,7 +189,7 @@ mod test {
     #[test]
     fn test_pwhash_verify() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let pw = randombytes(i);
             let pwh = pwhash(&pw, OPSLIMIT_INTERACTIVE, MEMLIMIT_INTERACTIVE).unwrap();
             assert!(pwhash_verify(&pwh, &pw));
@@ -188,10 +199,10 @@ mod test {
     #[test]
     fn test_pwhash_verify_tamper() {
         use randombytes::randombytes;
-        for i in (0..16usize) {
+        for i in 0..16usize {
             let mut pw = randombytes(i);
             let pwh = pwhash(&pw, OPSLIMIT_INTERACTIVE, MEMLIMIT_INTERACTIVE).unwrap();
-            for j in (0..pw.len()) {
+            for j in 0..pw.len() {
                 pw[j] ^= 0x20;
                 assert!(!pwhash_verify(&pwh, &pw));
                 pw[j] ^= 0x20;
@@ -199,10 +210,12 @@ mod test {
         }
     }
 
+    #[cfg(feature = "default")]
     #[test]
     fn test_serialisation() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        use test_utils::round_trip;
+        for i in 0..32usize {
             let pw = randombytes(i);
             let pwh = pwhash(&pw, OPSLIMIT_INTERACTIVE, MEMLIMIT_INTERACTIVE).unwrap();
             let salt = gen_salt();

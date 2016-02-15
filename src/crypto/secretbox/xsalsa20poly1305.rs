@@ -7,30 +7,35 @@
 use ffi;
 use marshal::marshal;
 use randombytes::randombytes_into;
+#[cfg(feature = "default")]
 use rustc_serialize;
 
+/// Number of bytes in `Key`.
 pub const KEYBYTES: usize = ffi::crypto_secretbox_xsalsa20poly1305_KEYBYTES;
+
+/// Number of bytes in a `Nonce`.
 pub const NONCEBYTES: usize = ffi::crypto_secretbox_xsalsa20poly1305_NONCEBYTES;
 
-/// `Key` for symmetric authenticated encryption
-///
-/// When a `Key` goes out of scope its contents
-/// will be zeroed out
-pub struct Key(pub [u8; KEYBYTES]);
+new_type! {
+    /// `Key` for symmetric authenticated encryption
+    ///
+    /// When a `Key` goes out of scope its contents
+    /// will be zeroed out
+    secret Key(KEYBYTES);
+}
 
-newtype_drop!(Key);
-newtype_clone!(Key);
-newtype_impl!(Key, KEYBYTES);
-
-/// `Nonce` for symmetric authenticated encryption
-#[derive(Copy)]
-pub struct Nonce(pub [u8; NONCEBYTES]);
-
-newtype_clone!(Nonce);
-newtype_impl!(Nonce, NONCEBYTES);
+new_type! {
+    /// `Nonce` for symmetric authenticated encryption
+    nonce Nonce(NONCEBYTES);
+}
 
 const ZEROBYTES: usize = 32;
 const BOXZEROBYTES: usize = 16;
+
+/// Number of bytes in the authenticator tag of an encrypted message
+/// i.e. the number of bytes by which the ciphertext is larger than the
+/// plaintext.
+pub const MACBYTES: usize = ffi::crypto_secretbox_xsalsa20poly1305_MACBYTES;
 
 /// `gen_key()` randomly generates a secret key
 ///
@@ -96,12 +101,11 @@ pub fn open(c: &[u8],
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::round_trip;
 
     #[test]
     fn test_seal_open() {
         use randombytes::randombytes;
-        for i in (0..256usize) {
+        for i in 0..256usize {
             let k = gen_key();
             let m = randombytes(i);
             let n = gen_nonce();
@@ -114,12 +118,12 @@ mod test {
     #[test]
     fn test_seal_open_tamper() {
         use randombytes::randombytes;
-        for i in (0..32usize) {
+        for i in 0..32usize {
             let k = gen_key();
             let m = randombytes(i);
             let n = gen_nonce();
             let mut c = seal(&m, &n, &k);
-            for i in (0..c.len()) {
+            for i in 0..c.len() {
                 c[i] ^= 0x20;
                 assert!(Err(()) == open(&mut c, &n, &k));
                 c[i] ^= 0x20;
@@ -179,9 +183,11 @@ mod test {
         assert!(Ok(m) == m2);
     }
 
+    #[cfg(feature = "default")]
     #[test]
     fn test_serialisation() {
-        for _ in (0..256usize) {
+        use test_utils::round_trip;
+        for _ in 0..256usize {
             let k = gen_key();
             let n = gen_nonce();
             round_trip(k);

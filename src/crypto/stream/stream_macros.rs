@@ -6,27 +6,27 @@ macro_rules! stream_module (($stream_name:ident,
 use libc::c_ulonglong;
 use std::iter::repeat;
 use randombytes::randombytes_into;
+#[cfg(feature = "default")]
 use rustc_serialize;
 
+/// Number of bytes in a `Key`.
 pub const KEYBYTES: usize = $keybytes;
+
+/// Number of bytes in a `Nonce`.
 pub const NONCEBYTES: usize = $noncebytes;
 
-/// `Key` for symmetric encryption
-///
-/// When a `Key` goes out of scope its contents
-/// will be zeroed out
-pub struct Key(pub [u8; KEYBYTES]);
+new_type! {
+    /// `Key` for symmetric encryption
+    ///
+    /// When a `Key` goes out of scope its contents
+    /// will be zeroed out
+    secret Key(KEYBYTES);
+}
 
-newtype_drop!(Key);
-newtype_clone!(Key);
-newtype_impl!(Key, KEYBYTES);
-
-/// `Nonce` for symmetric encryption
-#[derive(Copy)]
-pub struct Nonce(pub [u8; NONCEBYTES]);
-
-newtype_clone!(Nonce);
-newtype_impl!(Nonce, NONCEBYTES);
+new_type! {
+    /// `Nonce` for symmetric encryption
+    nonce Nonce(NONCEBYTES);
+}
 
 /// `gen_key()` randomly generates a key for symmetric encryption
 ///
@@ -109,12 +109,11 @@ pub fn stream_xor_inplace(m: &mut [u8],
 #[cfg(test)]
 mod test_m {
     use super::*;
-    use test_utils::round_trip;
 
     #[test]
     fn test_encrypt_decrypt() {
         use randombytes::randombytes;
-        for i in (0..1024usize) {
+        for i in 0..1024usize {
             let k = gen_key();
             let n = gen_nonce();
             let m = randombytes(i);
@@ -127,7 +126,7 @@ mod test_m {
     #[test]
     fn test_stream_xor() {
         use randombytes::randombytes;
-        for i in (0..1024usize) {
+        for i in 0..1024usize {
             let k = gen_key();
             let n = gen_nonce();
             let m = randombytes(i);
@@ -144,7 +143,7 @@ mod test_m {
     #[test]
     fn test_stream_xor_inplace() {
         use randombytes::randombytes;
-        for i in (0..1024usize) {
+        for i in 0..1024usize {
             let k = gen_key();
             let n = gen_nonce();
             let mut m = randombytes(i);
@@ -158,9 +157,11 @@ mod test_m {
         }
     }
 
+    #[cfg(feature = "default")]
     #[test]
     fn test_serialisation() {
-        for _ in (0..1024usize) {
+        use test_utils::round_trip;
+        for _ in 0..1024usize {
             let k = gen_key();
             let n = gen_nonce();
             round_trip(k);

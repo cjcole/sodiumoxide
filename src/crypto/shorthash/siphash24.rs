@@ -2,28 +2,26 @@
 use ffi;
 use libc::c_ulonglong;
 use randombytes::randombytes_into;
+#[cfg(feature = "default")]
 use rustc_serialize;
 
-pub const HASHBYTES: usize = ffi::crypto_shorthash_siphash24_BYTES;
+/// Number of bytes in a `Digest`.
+pub const DIGESTBYTES: usize = ffi::crypto_shorthash_siphash24_BYTES;
+
+/// Number of bytes in a `Key`.
 pub const KEYBYTES: usize = ffi::crypto_shorthash_siphash24_KEYBYTES;
 
-/// Digest-structure
-#[derive(Copy)]
-pub struct Digest(pub [u8; HASHBYTES]);
+new_type! {
+    /// `Digest` structure
+    public Digest(DIGESTBYTES);
+}
 
-newtype_clone!(Digest);
-newtype_impl!(Digest, HASHBYTES);
-non_secret_newtype_impl!(Digest);
-
-/// Key
-///
-/// When a `Key` goes out of scope its contents
-/// will be zeroed out
-pub struct Key(pub [u8; KEYBYTES]);
-
-newtype_drop!(Key);
-newtype_clone!(Key);
-newtype_impl!(Key, KEYBYTES);
+new_type! {
+    /// `Key`
+    ///
+    /// When a `Key` goes out of scope its contents will be zeroed out.
+    secret Key(KEYBYTES);
+}
 
 /// `gen_key()` randomly generates a key for shorthash
 ///
@@ -41,7 +39,7 @@ pub fn gen_key() -> Key {
 pub fn shorthash(m: &[u8],
                  &Key(ref k): &Key) -> Digest {
     unsafe {
-        let mut h = [0; HASHBYTES];
+        let mut h = [0; DIGESTBYTES];
         ffi::crypto_shorthash_siphash24(&mut h, m.as_ptr(),
                                         m.len() as c_ulonglong,
                                         k);
@@ -52,13 +50,12 @@ pub fn shorthash(m: &[u8],
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_utils::round_trip;
 
     #[test]
     fn test_vectors() {
         let maxlen = 64;
         let mut m = Vec::with_capacity(64);
-        for i in (0usize..64) {
+        for i in 0usize..64 {
             m.push(i as u8);
         }
         let h_expecteds = [[0x31, 0x0e, 0x0e, 0xdd, 0x47, 0xdb, 0x6f, 0x72]
@@ -126,16 +123,18 @@ mod test {
                           ,[0x57, 0x5f, 0xf2, 0x8e, 0x60, 0x38, 0x1b, 0xe5]
                           ,[0x72, 0x45, 0x06, 0xeb, 0x4c, 0x32, 0x8a, 0x95]];
         let k = Key([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-        for i in (0usize..maxlen) {
+        for i in 0usize..maxlen {
             let Digest(h) = shorthash(&m[..i], &k);
             assert!(h == h_expecteds[i]);
         }
     }
 
+    #[cfg(feature = "default")]
     #[test]
     fn test_serialisation() {
         use randombytes::randombytes;
-        for i in (0..64usize) {
+        use test_utils::round_trip;
+        for i in 0..64usize {
             let k = gen_key();
             let m = randombytes(i);
             let d = shorthash(&m[..], &k);
